@@ -1,0 +1,278 @@
+import bcrypt
+import os
+import shutil
+import wx
+from Crypto.Cipher import AES
+from Crypto.Random import get_random_bytes
+import face_recognition
+import cv2
+import pickle
+
+
+# AES Encryption
+def aes_encrypt(file_path, key):
+    cipher = AES.new(key, AES.MODE_EAX)
+    with open(file_path, 'rb') as file:
+        data = file.read()
+    ciphertext, tag = cipher.encrypt_and_digest(data)
+    return ciphertext, cipher.nonce
+
+
+def aes_decrypt(file_path, key, nonce):
+    cipher = AES.new(key, AES.MODE_EAX, nonce=nonce)
+    with open(file_path, 'rb') as file:
+        data = file.read()
+    return cipher.decrypt(data)
+
+
+# Face Enrollment
+def enroll_face(user_face_path):
+    cam = cv2.VideoCapture(0)
+    if not cam.isOpened():
+        raise Exception("Camera not accessible.")
+
+    print("Look at the camera to enroll your face...")
+    while True:
+        ret, frame = cam.read()
+        if not ret:
+            print("Failed to capture image. Retrying...")
+            continue
+
+        # Display the camera feed
+        cv2.imshow("Enroll Face - Press 's' to Save", frame)
+
+        # Wait for user to press 's' to save the image
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            cv2.imwrite(user_face_path, frame)
+            print("Face enrolled successfully!")
+            break
+        elif key == ord('q'):  # Allow user to quit
+            print("Enrollment canceled.")
+            break
+
+    cam.release()
+    cv2.destroyAllWindows()
+
+
+# Authenticate User Face
+def authenticate_face(known_face_path):
+    cam = cv2.VideoCapture(0)
+    if not cam.isOpened():
+        raise Exception("Camera not accessible.")
+
+    print("Look at the camera for authentication...")
+    while True:
+        ret, frame = cam.read()
+        if not ret:
+            print("Failed to capture image. Retrying...")
+            continue
+
+        # Display the camera feed
+        cv2.imshow("Authenticate Face - Press 's' to Authenticate", frame)
+
+        # Wait for user to press 's' to authenticate
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('s'):
+            input_face_path = "temp_face.jpg"
+            cv2.imwrite(input_face_path, frame)
+            cam.release()
+            cv2.destroyAllWindows()
+
+            # Convert images to RGB
+            known_image = cv2.cvtColor(cv2.imread(known_face_path), cv2.COLOR_BGR2RGB)
+            input_image = cv2.cvtColor(cv2.imread(input_face_path), cv2.COLOR_BGR2RGB)
+
+            known_encoding = face_recognition.face_encodings(known_image)
+            input_encoding = face_recognition.face_encodings(input_image)
+
+            if not known_encoding or not input_encoding:
+                print("No face detected. Please try again.")
+                os.remove(input_face_path)
+                return False
+
+            os.remove(input_face_path)
+            return face_recognition.compare_faces([known_encoding[0]], input_encoding[0])[0]
+        elif key == ord('q'):  # Allow user to quit
+            print("Authentication canceled.")
+            cam.release()
+            cv2.destroyAllWindows()
+            return False
+
+
+# Logging
+def log_event(event_message):
+    with open("encryption_log.txt", "a") as log_file:
+        log_file.write(event_message + "\n")
+
+
+class WelcomeScreen(wx.Frame):
+    def __init__(self, parent, user_face_path):
+        super().__init__(parent, title="Welcome to BioEncrypt", size=(700, 500))
+        self.panel = wx.Panel(self)
+        self.user_face_path = user_face_path
+
+        # Layout
+        main_sizer = wx.BoxSizer(wx.VERTICAL)
+        # Load and resize the logo image
+        image = wx.Image("logo.png", wx.BITMAP_TYPE_PNG)  # Load the image
+        resized_image = image.Scale(200, 200, wx.IMAGE_QUALITY_HIGH)  # Resize to 200x100 pixels
+        logo_bitmap = wx.Bitmap(resized_image)  # Convert back to a bitmap
+
+        # Display the resized logo
+        logo_image = wx.StaticBitmap(self.panel, bitmap=logo_bitmap)
+        main_sizer.Add(logo_image, 0, wx.CENTER | wx.TOP, 20)
+
+        # Welcome Text
+        welcome_text = wx.StaticText(
+            self.panel,
+            label=(
+                "Welcome to BioEncrypt!\n\n"
+                "Features:\n"
+                "1. Secure your files with AES encryption.\n"
+                "2. Access encrypted files using biometric Face ID.\n"
+                "3. Easily encrypt and decrypt files using this app.\n"
+                "4. Logs every action for your records.\n"
+            )
+        )
+        welcome_text.Wrap(600)  # Wrap text to fit the frame
+        main_sizer.Add(welcome_text, 0, wx.CENTER | wx.ALL, 10)
+
+        # Button logic based on face enrollment
+        if os.path.exists(self.user_face_path):
+            self.login_button = wx.Button(self.panel, label="Login with Face ID")
+            self.login_button.Bind(wx.EVT_BUTTON, self.login_with_face)
+            main_sizer.Add(self.login_button, 0, wx.CENTER | wx.ALL, 20)
+        else:
+            self.enroll_button = wx.Button(self.panel, label="Enroll Face")
+            self.enroll_button.Bind(wx.EVT_BUTTON, self.enroll_face)
+            main_sizer.Add(self.enroll_button, 0, wx.CENTER | wx.ALL, 20)
+
+        self.panel.SetSizer(main_sizer)
+
+    def enroll_face(self, event):
+        try:
+            enroll_face(self.user_face_path)
+            wx.MessageBox("Face enrolled successfully!", "Success", wx.OK | wx.ICON_INFORMATION)
+            self.Hide()
+            explorer = FileExplorerApp(self.user_face_path)
+            explorer.Show()
+        except Exception as e:
+            wx.MessageBox(f"Error during face enrollment: {e}", "Error", wx.OK | wx.ICON_ERROR)
+
+    def login_with_face(self, event):
+        try:
+            if authenticate_face(self.user_face_path):
+                wx.MessageBox("Login successful!", "Success", wx.OK | wx.ICON_INFORMATION)
+                self.Hide()
+                explorer = FileExplorerApp(self.user_face_path)
+                explorer.Show()
+            else:
+                wx.MessageBox("Login failed. Face not recognized.", "Error", wx.OK | wx.ICON_ERROR)
+        except Exception as e:
+            wx.MessageBox(f"Error during authentication: {e}", "Error", wx.OK | wx.ICON_ERROR)
+
+
+class FileExplorerApp(wx.Frame):
+    def __init__(self, user_face_path):
+        super().__init__(None, title="Secure File Explorer")
+        self.panel = wx.Panel(self)
+        self.user_face_path = user_face_path
+        self.files_dir = "files"
+
+        # Ensure `files` directory exists
+        if not os.path.exists(self.files_dir):
+            os.makedirs(self.files_dir)
+
+        # Layout
+        self.SetSize(700, 500)
+        self.file_list = wx.ListBox(self.panel, pos=(20, 20), size=(500, 400))
+        self.refresh_button = wx.Button(self.panel, label="Refresh Files", pos=(550, 50))
+        self.encrypt_button = wx.Button(self.panel, label="Encrypt File", pos=(550, 100))
+        self.decrypt_button = wx.Button(self.panel, label="Decrypt File", pos=(550, 150))
+
+        # Bind events
+        self.refresh_button.Bind(wx.EVT_BUTTON, self.refresh_files)
+        self.encrypt_button.Bind(wx.EVT_BUTTON, self.encrypt_file)
+        self.decrypt_button.Bind(wx.EVT_BUTTON, self.decrypt_file)
+
+        # Initialize File List
+        self.refresh_files(None)
+
+    def refresh_files(self, event):
+        """Refresh the list of encrypted files in the `files` directory."""
+        self.file_list.Clear()
+        for file in os.listdir(self.files_dir):
+            if file.endswith(".enc"):
+                self.file_list.Append(file)
+
+    def encrypt_file(self, event):
+        """Encrypt a selected file and copy it to the `files` directory."""
+        with wx.FileDialog(self, "Choose a file to encrypt", wildcard="All files (*.*)|*.*",
+                           style=wx.FD_OPEN | wx.FD_FILE_MUST_EXIST) as dialog:
+            if dialog.ShowModal() == wx.ID_CANCEL:
+                return
+            file_path = dialog.GetPath()
+            file_name = os.path.basename(file_path)
+            destination_path = os.path.join(self.files_dir, file_name + ".enc")
+
+            # Generate encryption key and encrypt the file
+            key = get_random_bytes(16)
+            ciphertext, nonce = aes_encrypt(file_path, key)
+
+            # Save encrypted file
+            with open(destination_path, "wb") as enc_file:
+                enc_file.write(ciphertext)
+
+            # Save key and nonce
+            with open(destination_path + ".key", "wb") as key_file:
+                pickle.dump((key, nonce), key_file)
+
+            log_event(f"File encrypted: {file_path}")
+            wx.MessageBox("File encrypted successfully!", "Success", wx.OK | wx.ICON_INFORMATION)
+
+            self.refresh_files(None)
+
+    def decrypt_file(self, event):
+        """Decrypt a selected file from the `files` directory."""
+        selected_file = self.file_list.GetStringSelection()
+        if not selected_file:
+            wx.MessageBox("No file selected.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        # Authenticate the user's face
+        if not authenticate_face(self.user_face_path):
+            wx.MessageBox("Authentication failed. Cannot decrypt file.", "Error", wx.OK | wx.ICON_ERROR)
+            return
+
+        # Paths for encrypted file and key
+        encrypted_path = os.path.join(self.files_dir, selected_file)
+        key_file_path = encrypted_path + ".key"
+
+        # Load encryption key and nonce
+        with open(key_file_path, "rb") as key_file:
+            key, nonce = pickle.load(key_file)
+
+        # Decrypt the file
+        decrypted_data = aes_decrypt(encrypted_path, key, nonce)
+        original_file_path = encrypted_path.replace(".enc", "")
+
+        # Save the decrypted file
+        with open(original_file_path, "wb") as file:
+            file.write(decrypted_data)
+
+        log_event(f"File decrypted: {encrypted_path}")
+        wx.MessageBox("File decrypted successfully!", "Success", wx.OK | wx.ICON_INFORMATION)
+
+        # Cleanup
+        os.remove(encrypted_path)
+        os.remove(key_file_path)
+        self.refresh_files(None)
+
+
+if __name__ == "__main__":
+    app = wx.App()
+    frame = WelcomeScreen(None, "user_face.jpg")
+    frame.Show()
+    app.MainLoop()
+
