@@ -55,6 +55,16 @@ BioEncrypt is a desktop-based cybersecurity project developed to provide secure 
 
 ## Screenshots
 ![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/Login:%20Sign%20up%20Page.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/Login%20Page.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/Sign%20up%20Successfully.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/User%20Name%20:%20Password.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/Login%20Successfully%20.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/File%20Explorer.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/choosing%20files.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/File%20Encrypted.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/File%20decrypted.png?raw=true)
+![image alt](https://github.com/pivv99/BioEncrypt-Secure-File-Encryption-System/blob/main/Logging%20Out.png?raw=true)
+
 
 ## Author
 Mohamed Emaad
